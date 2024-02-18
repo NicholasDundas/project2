@@ -4,8 +4,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <ucontext.h>
-
-#define STACK_SIZE SIGSTKSZ
+#define STACK_SIZE SIGSTKSZ 
 
 void simplef(){
   puts("You are in a different context!\n");

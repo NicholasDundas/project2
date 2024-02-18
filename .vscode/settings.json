@@ -1,0 +1,11 @@
+{
+    "files.associations": {
+        "*.h": "c",
+        "array": "c",
+        "string": "c",
+        "string_view": "c",
+        "*.tcc": "c",
+        "chrono": "c",
+        "variant": "c"
+    }
+}

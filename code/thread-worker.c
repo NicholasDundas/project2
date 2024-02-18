@@ -1,14 +1,16 @@
 // File:	thread-worker.c
 
 // List all group member's name:
-/*
+/* Nicholas Dundas npd59
+ * Liam O'Neil
  */
-// username of iLab:
-// iLab Server:
+// username of iLab: npd59
+// iLab Server: ilab1.cs.rutgers.edu
 
 
 #include "thread-worker.h"
-#include "thread_worker_types.h"
+#include "thread-worker_types.h"
+#include "hashtable.h"
 
 #define STACK_SIZE 16 * 1024
 #define QUANTUM 10 * 1000
@@ -16,13 +18,23 @@
 
 // INITIALIZE ALL YOUR OTHER VARIABLES HERE
 int init_scheduler_done = 0;
+int threading = 0;
+hashtable thread_table;
 
-
+void clean_threads() { //delete all threads upon program exit
+    free_hashtable(&thread_table);
+    //TODO PROPER CLEANUP OF THREAD STRUCTS
+}
 
 /* create a new thread */
 int worker_create(worker_t *thread, pthread_attr_t *attr,
                   void *(*function)(void *), void *arg)
 {
+    if(!threading) { //run once if any threads are created to initalize everything
+        threading++;
+        init_hashtable(&thread_table);
+        atexit(clean_threads);
+    }
     // - create Thread Control Block (TCB)
     // - create and initialize the context of this worker thread
     // - allocate space of stack for this thread to run

@@ -9,13 +9,12 @@ thread-worker.a: thread-worker.o
 	$(AR) libthread-worker.a thread-worker.o
 	$(RANLIB) libthread-worker.a
 
-
-thread-worker.o: thread-worker.h thread_worker_types.h mutex_types.h
+thread-worker.o: dlist.h hashtable.h thread-worker.h thread-worker_types.h mutex_types.h
 
 ifeq ($(SCHED), RR)
-	$(CC) $(CFLAGS) -DRR thread-worker.c
+	$(CC) $(CFLAGS) -DRR dlist.c hashtable.c thread-worker.c 
 else ifeq ($(SCHED), MLFQ)
-	$(CC) $(CFLAGS) -DMLFQ thread-worker.c
+	$(CC) $(CFLAGS) -DMLFQ dlist.c hashtable.c thread-worker.c
 else
 	echo "no such scheduling algorithm"
 endif
