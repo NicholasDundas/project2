@@ -1,0 +1,33 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "maketest",
+            "command": "make", 
+            "args": ["test"],
+            "type": "shell",
+            "options": {
+                "cwd": "${workspaceFolder}/code/benchmarks"
+            },
+            "dependsOn":["benchmarkclean", "makethreads"]
+        },
+        {
+            "label": "benchmarkclean", 
+            "type":"shell",
+            "command":"make",
+            "args": ["clean"],
+            "options": {
+                "cwd": "${workspaceFolder}/code/benchmarks"
+            },
+        },
+        {
+            "label": "makethreads",
+            "command": "make", 
+            "args": ["SCHED=RR"],
+            "type": "shell",
+            "options": {
+                "cwd": "${workspaceFolder}/code"
+            },
+        }
+    ]
+}

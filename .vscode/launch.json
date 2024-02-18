@@ -5,13 +5,14 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "preLaunchTask": "maketest",
             "name": "Test Launch",
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/code/benchmarks/test",
             "args": [],
             "stopAtEntry": false,
-            "cwd": "${fileDirname}",
+            "cwd": "${workspaceFolder}/code/",
             "environment": [],
             "externalConsole": false,
             "MIMode": "gdb",
