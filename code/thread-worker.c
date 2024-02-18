@@ -11,19 +11,22 @@
 #include "thread-worker.h"
 #include "thread-worker_types.h"
 
-#include <signal.h>
-#include <sys/time.h>
+
 
 #define STACK_SIZE 16 * 1024
 #define QUANTUM 10 * 1000
 
 
-// INITIALIZE ALL YOUR OTHER VARIABLES HERE
+#include <signal.h>
+#include <sys/time.h>
+#include <string.h>
 
+// INITIALIZE ALL YOUR OTHER VARIABLES HERE
+int initialized_threads = 0;
 struct sigaction sa;
 struct itimerval timer;
 tcb main_thread;
-worker_t threadnum = 0;
+worker_t totalthread = 0;
 
 // _queue->prev points to back of queue but it is not circular as the last element->next points to NULL
 tcb* run_queue = NULL;
@@ -31,6 +34,10 @@ tcb* ready_queue = NULL;
 tcb* block_queue = NULL;
 tcb* terminated_queue = NULL;
 tcb* running = NULL;
+
+
+static void schedule();
+static void sched_rr();
 
 tcb* back(tcb* queue) { //returns last element, returns NULL if none
     return queue ? queue->prev : NULL;
@@ -50,11 +57,12 @@ tcb* pop_front(tcb** queue) { //pops front element, returns NULL if none
 }
 
 tcb* emplace_back(tcb** queue, tcb* thread) { //pushing element to the back and returns second argument
-    if(queue) {
+    if(*queue) {
         thread->next = NULL; 
+        thread->prev = back(*queue);
         (*queue)->prev->next = thread;
         (*queue)->prev = thread;
-    } else {
+    } else { //1st element condition
         *queue = thread;
         (*queue)->next = NULL;
         thread->prev = thread;
@@ -62,7 +70,7 @@ tcb* emplace_back(tcb** queue, tcb* thread) { //pushing element to the back and 
     return thread;
 }
 
-tcb* remove(tcb** queue, tcb* thread) { //removes an element from the list and return its, returns NULL if none found
+tcb* remove_elem(tcb** queue, tcb* thread) { //removes an element from the list and return its, returns NULL if none found
     tcb* cur = *queue;
     while(cur) {
         if(cur->id == thread->id) break;
@@ -113,13 +121,18 @@ tcb* get_thread(worker_t id) { //returns tcb for the given id or NULL
     return NULL;
 }
 
+worker_t get_unique_id() {
+    worker_t *used = calloc(totalthread,sizeof(worker_t));
+    
+}
+
 void worker_run(void *(*function)(void *), void *arg) {
     worker_exit(function(arg));
 }
 
 void init_workers() {
     memset (&sa, 0, sizeof(sa));
-    sa.sa_handler = &schedule;
+    sa.sa_handler = schedule;
     sigaction (SIGPROF, &sa, NULL);
     timer.it_interval.tv_usec = QUANTUM; 
 	timer.it_interval.tv_sec = 0;
@@ -133,15 +146,19 @@ void init_workers() {
 		exit(EXIT_FAILURE);
 	}	
 	running = &main_thread;
+    main_thread.next = NULL;
+    main_thread.prev = NULL;
 }
 
 /* create a new thread */
 int worker_create(worker_t *thread, pthread_attr_t *attr, void *(*function)(void *), void *arg) {
-    if(!threadnum) {
+    if(!initialized_threads) {
+        initialized_threads++;
         init_workers();
     }
     tcb* new_thread = malloc(sizeof(tcb));
-    new_thread->id = threadnum++;
+    totalthread++;
+    new_thread->id = get_unique_id();
     if (getcontext(&new_thread->context) == -1) {
 		printf("Error getting worker thread context\n");
 		exit(EXIT_FAILURE);
@@ -248,15 +265,14 @@ static void schedule()
 // - schedule policy
 #ifndef MLFQ
     // Choose RR
-    
+    sched_rr();
 #else
     // Choose MLFQ
     
 #endif
 }
 
-static void sched_rr()
-{
+static void sched_rr() {
     // - your own implementation of RR
     // (feel free to modify arguments and return types)
 

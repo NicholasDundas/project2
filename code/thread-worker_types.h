@@ -21,7 +21,7 @@ typedef struct TCB {
     void* retval;
     // thread priority
     int priority;
-    tcb *next, *prev;
+    struct TCB *next, *prev;
 } tcb;
 
 #endif

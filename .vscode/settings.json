@@ -7,5 +7,6 @@
         "*.tcc": "c",
         "chrono": "c",
         "variant": "c"
-    }
+    },
+    "cmake.configureOnOpen": false
 }
