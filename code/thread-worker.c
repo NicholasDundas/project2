@@ -10,7 +10,9 @@
 
 #include "thread-worker.h"
 #include "thread-worker_types.h"
-#include "hashtable.h"
+
+#include <signal.h>
+#include <sys/time.h>
 
 #define STACK_SIZE 16 * 1024
 #define QUANTUM 10 * 1000
@@ -18,23 +20,144 @@
 
 // INITIALIZE ALL YOUR OTHER VARIABLES HERE
 int init_scheduler_done = 0;
-int threading = 0;
-hashtable thread_table;
 
-void clean_threads() { //delete all threads upon program exit
-    free_hashtable(&thread_table);
-    //TODO PROPER CLEANUP OF THREAD STRUCTS
+struct sigaction sa;
+struct itimerval timer;
+tcb main_thread;
+worker_t threadnum = 0;
+
+// _queue->prev points to back of queue but it is not circular as the last element->next points to NULL
+tcb* run_queue = NULL;
+tcb* ready_queue = NULL;
+tcb* block_queue = NULL;
+tcb* terminated_queue = NULL;
+tcb* running = NULL;
+
+tcb* back(tcb* queue) { //returns last element, returns NULL if none
+    return queue ? queue->prev : NULL;
+}
+
+tcb* pop_front(tcb** queue) { //pops front element, returns NULL if none
+    tcb* temp = *queue;
+    if(back(*queue) == *queue) {
+        *queue = NULL;
+    } else {
+        (*queue) = temp->next;
+        (*queue)->prev = temp->prev;
+        temp->prev = NULL;
+        temp->next = NULL;
+    }
+    return temp;
+}
+
+tcb* emplace_back(tcb** queue, tcb* thread) { //pushing element to the back and returns second argument
+    if(queue) {
+        thread->next = NULL; 
+        (*queue)->prev->next = thread;
+        (*queue)->prev = thread;
+    } else {
+        *queue = thread;
+        (*queue)->next = NULL;
+        thread->prev = thread;
+    }
+    return thread;
+}
+
+tcb* remove(tcb** queue, tcb* thread) { //removes an element from the list and return its, returns NULL if none found
+    tcb* cur = *queue;
+    while(cur) {
+        if(cur->id == thread->id) break;
+        cur = cur->next;
+    }
+    if(cur) { 
+        if(cur == *queue) { //1st element 
+            *queue = cur->next;
+            (*queue)->prev = cur->prev; 
+        } else if (cur == back(*queue)) { //Last element
+            (*queue)->prev = cur->prev;
+            cur->prev->next = NULL;
+        } else { //In the middle
+            cur->prev->next = cur->next;
+            cur->next->prev = cur->prev;
+        }
+        cur->prev = NULL;
+        cur->next = NULL;
+    }
+    return cur;
+}
+
+tcb* get_thread(worker_t id) { //returns tcb for the given id or NULL
+    tcb* cur = run_queue;
+    while(cur) {
+        if(cur->id == id) return cur;
+        cur = cur->next;
+    }
+
+    cur = ready_queue;
+    while(cur) {
+        if(cur->id == id) return cur;
+        cur = cur->next;
+    }
+    
+    cur = block_queue;
+    while(cur) {
+        if(cur->id == id) return cur;
+        cur = cur->next;
+    }
+    if(cur->id == id) return cur;
+        
+    cur = terminated_queue;
+    while(cur) {
+        if(cur->id == id) return cur;
+        cur = cur->next;
+    }
+
+    return NULL;
+}
+
+void worker_run(void *(*function)(void *), void *arg) {
+    worker_exit(function(arg));
+}
+
+void init_workers() {
+    memset (&sa, 0, sizeof(sa));
+    sa.sa_handler = &schedule;
+    sigaction (SIGPROF, &sa, NULL);
+    timer.it_interval.tv_usec = QUANTUM; 
+	timer.it_interval.tv_sec = 0;
+    if(setitimer(ITIMER_PROF, &timer, NULL) == -1) {
+        perror("Error setting timer during worker init\n");
+        exit(EXIT_FAILURE);
+    }
+    main_thread.id = -1;
+    if (getcontext(&main_thread.context) == -1) {
+		printf("Error getting main thread context\n");
+		exit(EXIT_FAILURE);
+	}	
+	running = &main_thread;
 }
 
 /* create a new thread */
-int worker_create(worker_t *thread, pthread_attr_t *attr,
-                  void *(*function)(void *), void *arg)
-{
-    if(!threading) { //run once if any threads are created to initalize everything
-        threading++;
-        init_hashtable(&thread_table);
-        atexit(clean_threads);
+int worker_create(worker_t *thread, pthread_attr_t *attr, void *(*function)(void *), void *arg) {
+    if(!threadnum) {
+        init_workers();
     }
+    tcb* new_thread = malloc(sizeof(tcb));
+    new_thread->id = threadnum++;
+    if (getcontext(&new_thread->context) == -1) {
+		printf("Error getting worker thread context\n");
+		exit(EXIT_FAILURE);
+	}
+
+    new_thread->context.uc_stack.ss_size = STACK_SIZE;
+    new_thread->context.uc_stack.ss_sp = malloc(new_thread->context.uc_stack.ss_size);
+    new_thread->context.uc_stack.ss_flags = 0;
+    new_thread->context.uc_link = &main_thread.context;
+    makecontext(&new_thread->context,(void (*)())worker_run,2,function,arg);
+
+    emplace_back(&run_queue,new_thread);
+
+
     // - create Thread Control Block (TCB)
     // - create and initialize the context of this worker thread
     // - allocate space of stack for this thread to run
@@ -57,6 +180,9 @@ int worker_yield()
 /* terminate a thread */
 void worker_exit(void *value_ptr)
 {
+    //pushing to the back of queue
+    emplace_back(&terminated_queue,running);
+    running->retval = value_ptr;
     // - if value_ptr is provided, save return value
     // - de-allocate any dynamic memory created when starting this thread (could be done here or elsewhere)
 }

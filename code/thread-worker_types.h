@@ -18,9 +18,10 @@ typedef struct TCB {
     //     contains signal mask for any blocked signals
     ucontext_t context;
 
+    void* retval;
     // thread priority
     int priority;
-
+    tcb *next, *prev;
 } tcb;
 
 #endif
