@@ -1,8 +1,11 @@
-// File:	worker_t.h
+// File:	thread-worker.c
 
 // List all group member's name:
-// username of iLab:
-// iLab Server:
+/* Nicholas Dundas npd59
+ * Liam O'Neil ljo38
+ */
+// username of iLab: npd59
+// iLab Server: ilab1.cs.rutgers.edu
 
 #ifndef WORKER_T_H
 #define WORKER_T_H
