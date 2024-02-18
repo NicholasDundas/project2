@@ -19,7 +19,6 @@
 
 
 // INITIALIZE ALL YOUR OTHER VARIABLES HERE
-int init_scheduler_done = 0;
 
 struct sigaction sa;
 struct itimerval timer;
@@ -104,7 +103,6 @@ tcb* get_thread(worker_t id) { //returns tcb for the given id or NULL
         if(cur->id == id) return cur;
         cur = cur->next;
     }
-    if(cur->id == id) return cur;
         
     cur = terminated_queue;
     while(cur) {
