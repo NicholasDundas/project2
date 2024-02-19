@@ -22,33 +22,38 @@
 #include <string.h>
 
 // INITIALIZE ALL YOUR OTHER VARIABLES HERE
-int initialized_threads = 0;
+int initialized_threads = 0; //keeping track of whether we need to initialize variables
 struct sigaction sa;
-struct itimerval timer;
-tcb main_thread;
-worker_t totalthread = 0;
+struct itimerval timer; //used for timer interrupts for schedule()
+tcb main_thread; //the main executing thread
+int totalthread = 0; //total count of threads
 
-// _queue->prev points to back of queue but it is not circular as the last element->next points to NULL
-tcb* ready_queue = NULL;
-tcb* block_queue = NULL;
-tcb* terminated_queue = NULL;
-tcb* running = NULL;
+// ####_queue->prev points to back of queue but it is not circular as the last element->next points to NULL
+
+tcb* q_ready = NULL; //threads waiting to be run
+tcb* q_block = NULL; //threads currently blocking
+tcb* q_terminated = NULL; //threads finished executing
+
+tcb* running = NULL; //current running thread
 
 
 static void schedule();
 static void sched_rr();
 
-size_t size(tcb* queue) {
+//returns size of queue
+size_t q_size(const tcb* queue) {
     return queue ? queue->queue_size : 0;
 }
 
-tcb* back(tcb* queue) { //returns last element, returns NULL if none
+//returns back of queue
+tcb* q_back(const tcb* queue) { 
     return queue ? queue->prev : NULL;
 }
 
-tcb* pop_front(tcb** queue) { //pops front element, returns NULL if none
+//pops front element from queue and returns it, returns NULL if none
+tcb* q_pop_front(tcb** queue) { 
     tcb* temp = *queue;
-    if(back(*queue) == *queue) {
+    if(q_back(*queue) == *queue) {
         *queue = NULL;
     } else {
         temp->next->queue_size = (*queue)->queue_size - 1;
@@ -60,14 +65,15 @@ tcb* pop_front(tcb** queue) { //pops front element, returns NULL if none
     return temp;
 }
 
-tcb* emplace_back(tcb** queue, tcb* thread) { //pushing element to the back and returns second argument
+//pushing element to the back and returns second argument
+tcb* q_emplace_back(tcb** queue, tcb* thread) { 
     if(*queue) {
         thread->next = NULL; 
-        thread->prev = back(*queue);
+        thread->prev = q_back(*queue);
         (*queue)->prev->next = thread;
         (*queue)->prev = thread;
         (*queue)->queue_size++;
-    } else { //1st element condition
+    } else { //length 0 condition
         *queue = thread;
         (*queue)->next = NULL;
         (*queue)->queue_size = 1;
@@ -76,19 +82,26 @@ tcb* emplace_back(tcb** queue, tcb* thread) { //pushing element to the back and 
     return thread;
 }
 
-tcb* remove_elem(tcb** queue, tcb* thread) { //removes an element from the list and return its, returns NULL if none found
-    tcb* cur = *queue;
+//finds a element in a specific queue, returns NULL if none
+tcb* q_find_elem(const tcb* queue, worker_t id) { 
+    tcb* cur = queue;
     while(cur) {
-        if(cur->id == thread->id) break;
+        if(cur->id == id) break;
         cur = cur->next;
-    }
+    } 
+    return cur;
+}
+
+//removes an element from the list and return seconds argument, returns NULL if none found
+tcb* q_remove_elem(tcb** queue, tcb* thread) { 
+    tcb* cur = q_find_elem(*queue,thread->id);
     if(cur) { 
         if(cur == *queue) { //1st element 
-            cur = pop_front(queue);
-        } else if (cur == back(*queue)) { //Last element
+            cur = q_pop_front(queue);
+        } else if (cur == q_back(*queue)) { //Last element
             (*queue)->queue_size--;
             (*queue)->prev = cur->prev;
-            cur->prev->next = NULL;
+            (*queue)->prev->next = NULL;
         } else { //In the middle
             (*queue)->queue_size--;
             cur->prev->next = cur->next;
@@ -104,19 +117,19 @@ tcb* get_thread(worker_t id) { //returns tcb for the given id or NULL
     if(id == running->id)
         return running;
 
-    tcb* cur = ready_queue;
+    tcb* cur = q_ready;
     while(cur) {
         if(cur->id == id) return cur;
         cur = cur->next;
     }
     
-    cur = block_queue;
+    cur = q_block;
     while(cur) {
         if(cur->id == id) return cur;
         cur = cur->next;
     }
         
-    cur = terminated_queue;
+    cur = q_terminated;
     while(cur) {
         if(cur->id == id) return cur;
         cur = cur->next;
@@ -125,27 +138,27 @@ tcb* get_thread(worker_t id) { //returns tcb for the given id or NULL
     return NULL;
 }
 
-worker_t get_unique_id() {
-    int *used = calloc(size(ready_queue) + size(block_queue) + size(terminated_queue) + 1,sizeof(int));
+worker_t get_unique_id() { //used to get the next lowest available id
+    int *used = calloc(q_size(q_ready) + q_size(q_block) + q_size(q_terminated) + 1 /*tcb* running*/ + 1 /*for potentially no ids*/,sizeof(int));
     if(!used) {
         perror("Could not run function get_unique_id()");
         exit(EXIT_FAILURE);
     }
     if(running)
         used[running->id] = 1;
-    tcb* cur = ready_queue;
+    tcb* cur = q_ready;
     while(cur) {
         used[cur->id] = 1;
         cur = cur->next;
     }
     
-    cur = block_queue;
+    cur = q_block;
     while(cur) {
         used[cur->id] = 1;
         cur = cur->next;
     }
         
-    cur = terminated_queue;
+    cur = q_terminated;
     while(cur) {
         used[cur->id] = 1;
         cur = cur->next;
@@ -166,12 +179,14 @@ void init_workers() {
     memset (&sa, 0, sizeof(sa));
     sa.sa_handler = schedule;
     sigaction (SIGPROF, &sa, NULL);
+
     timer.it_interval.tv_usec = QUANTUM; 
 	timer.it_interval.tv_sec = 0;
     if(setitimer(ITIMER_PROF, &timer, NULL) == -1) {
         perror("Error setting timer during worker init\n");
         exit(EXIT_FAILURE);
     }
+
     main_thread.id = 0;
     makecontext(&main_thread.context, (void *)&schedule, 0);
 	running = &main_thread;
@@ -199,7 +214,7 @@ int worker_create(worker_t *thread, pthread_attr_t *attr, void *(*function)(void
     new_thread->context.uc_link = &main_thread.context;
     makecontext(&new_thread->context,(void *)&worker_run,2,function,arg);
 
-    emplace_back(&ready_queue,new_thread);
+    q_emplace_back(&q_ready,new_thread);
 
 
     // - create Thread Control Block (TCB)
@@ -225,7 +240,7 @@ int worker_yield()
 void worker_exit(void *value_ptr)
 {
     //pushing to the back of queue
-    emplace_back(&terminated_queue,running);
+    q_emplace_back(&q_terminated,running);
     running->retval = value_ptr;
     // - if value_ptr is provided, save return value
     // - de-allocate any dynamic memory created when starting this thread (could be done here or elsewhere)
@@ -292,6 +307,7 @@ static void schedule() {
 
 // - schedule policy
 setitimer(ITIMER_PROF, NULL, NULL);
+
 #ifndef MLFQ
     // Choose RR
     sched_rr();

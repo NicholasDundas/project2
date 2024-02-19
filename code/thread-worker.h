@@ -52,13 +52,14 @@ int worker_mutex_destroy(worker_mutex_t *mutex);
 #include <sys/time.h>
 #include <string.h>
 
-
-tcb* back(tcb* queue);
-tcb* pop_front(tcb** queue);
-tcb* emplace_back(tcb** queue, tcb* thread);
-tcb* remove_elem(tcb** queue, tcb* thread);
+size_t q_size(const tcb* queue)
+tcb* q_find_elem(const tcb* queue, worker_t id);
+tcb* q_back(const tcb* queue);
+tcb* q_pop_front(tcb** queue);
+tcb* q_emplace_back(tcb** queue, tcb* thread);
+tcb* q_remove_elem(tcb** queue, tcb* thread);
 tcb* get_thread(worker_t id);
-tcb* get_thread(worker_t id);
+worker_t get_unique_id();
 
 #endif
 
