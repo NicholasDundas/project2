@@ -29,7 +29,6 @@ tcb main_thread;
 worker_t totalthread = 0;
 
 // _queue->prev points to back of queue but it is not circular as the last element->next points to NULL
-tcb* run_queue = NULL;
 tcb* ready_queue = NULL;
 tcb* block_queue = NULL;
 tcb* terminated_queue = NULL;
@@ -38,6 +37,10 @@ tcb* running = NULL;
 
 static void schedule();
 static void sched_rr();
+
+size_t size(tcb* queue) {
+    return queue ? queue->queue_size : 0;
+}
 
 tcb* back(tcb* queue) { //returns last element, returns NULL if none
     return queue ? queue->prev : NULL;
@@ -48,6 +51,7 @@ tcb* pop_front(tcb** queue) { //pops front element, returns NULL if none
     if(back(*queue) == *queue) {
         *queue = NULL;
     } else {
+        temp->next->queue_size = (*queue)->queue_size - 1;
         (*queue) = temp->next;
         (*queue)->prev = temp->prev;
         temp->prev = NULL;
@@ -62,9 +66,11 @@ tcb* emplace_back(tcb** queue, tcb* thread) { //pushing element to the back and 
         thread->prev = back(*queue);
         (*queue)->prev->next = thread;
         (*queue)->prev = thread;
+        (*queue)->queue_size++;
     } else { //1st element condition
         *queue = thread;
         (*queue)->next = NULL;
+        (*queue)->queue_size = 1;
         thread->prev = thread;
     }
     return thread;
@@ -78,12 +84,13 @@ tcb* remove_elem(tcb** queue, tcb* thread) { //removes an element from the list 
     }
     if(cur) { 
         if(cur == *queue) { //1st element 
-            *queue = cur->next;
-            (*queue)->prev = cur->prev; 
+            cur = pop_front(queue);
         } else if (cur == back(*queue)) { //Last element
+            (*queue)->queue_size--;
             (*queue)->prev = cur->prev;
             cur->prev->next = NULL;
         } else { //In the middle
+            (*queue)->queue_size--;
             cur->prev->next = cur->next;
             cur->next->prev = cur->prev;
         }
@@ -94,13 +101,10 @@ tcb* remove_elem(tcb** queue, tcb* thread) { //removes an element from the list 
 }
 
 tcb* get_thread(worker_t id) { //returns tcb for the given id or NULL
-    tcb* cur = run_queue;
-    while(cur) {
-        if(cur->id == id) return cur;
-        cur = cur->next;
-    }
+    if(id == running->id)
+        return running;
 
-    cur = ready_queue;
+    tcb* cur = ready_queue;
     while(cur) {
         if(cur->id == id) return cur;
         cur = cur->next;
@@ -122,8 +126,36 @@ tcb* get_thread(worker_t id) { //returns tcb for the given id or NULL
 }
 
 worker_t get_unique_id() {
-    worker_t *used = calloc(totalthread,sizeof(worker_t));
+    int *used = calloc(size(ready_queue) + size(block_queue) + size(terminated_queue) + 1,sizeof(int));
+    if(!used) {
+        perror("Could not run function get_unique_id()");
+        exit(EXIT_FAILURE);
+    }
+    if(running)
+        used[running->id] = 1;
+    tcb* cur = ready_queue;
+    while(cur) {
+        used[cur->id] = 1;
+        cur = cur->next;
+    }
     
+    cur = block_queue;
+    while(cur) {
+        used[cur->id] = 1;
+        cur = cur->next;
+    }
+        
+    cur = terminated_queue;
+    while(cur) {
+        used[cur->id] = 1;
+        cur = cur->next;
+    }
+    worker_t new_id = 0;
+    while(used[new_id]) {
+        new_id++;
+    }
+    free(used);
+    return new_id;
 }
 
 void worker_run(void *(*function)(void *), void *arg) {
@@ -140,11 +172,8 @@ void init_workers() {
         perror("Error setting timer during worker init\n");
         exit(EXIT_FAILURE);
     }
-    main_thread.id = -1;
-    if (getcontext(&main_thread.context) == -1) {
-		printf("Error getting main thread context\n");
-		exit(EXIT_FAILURE);
-	}	
+    main_thread.id = 0;
+    makecontext(&main_thread.context, (void *)&schedule, 0);
 	running = &main_thread;
     main_thread.next = NULL;
     main_thread.prev = NULL;
@@ -160,7 +189,7 @@ int worker_create(worker_t *thread, pthread_attr_t *attr, void *(*function)(void
     totalthread++;
     new_thread->id = get_unique_id();
     if (getcontext(&new_thread->context) == -1) {
-		printf("Error getting worker thread context\n");
+		perror("Error getting worker thread context\n");
 		exit(EXIT_FAILURE);
 	}
 
@@ -168,9 +197,9 @@ int worker_create(worker_t *thread, pthread_attr_t *attr, void *(*function)(void
     new_thread->context.uc_stack.ss_sp = malloc(new_thread->context.uc_stack.ss_size);
     new_thread->context.uc_stack.ss_flags = 0;
     new_thread->context.uc_link = &main_thread.context;
-    makecontext(&new_thread->context,(void (*)())worker_run,2,function,arg);
+    makecontext(&new_thread->context,(void *)&worker_run,2,function,arg);
 
-    emplace_back(&run_queue,new_thread);
+    emplace_back(&ready_queue,new_thread);
 
 
     // - create Thread Control Block (TCB)
@@ -254,8 +283,7 @@ int worker_mutex_destroy(worker_mutex_t *mutex)
 };
 
 /* scheduler */
-static void schedule()
-{
+static void schedule() {
 // - every time a timer interrupt occurs, your worker thread library
 // should be contexted switched from a thread context to this
 // schedule() function
@@ -263,6 +291,7 @@ static void schedule()
 // - invoke scheduling algorithms according to the policy (RR or MLFQ)
 
 // - schedule policy
+setitimer(ITIMER_PROF, NULL, NULL);
 #ifndef MLFQ
     // Choose RR
     sched_rr();

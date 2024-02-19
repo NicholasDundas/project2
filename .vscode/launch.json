@@ -6,7 +6,7 @@
     "configurations": [
         {
             "preLaunchTask": "maketest",
-            "name": "Test Launch",
+            "name": "Launch and debug test.c",
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/code/benchmarks/test",

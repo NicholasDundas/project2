@@ -12,6 +12,7 @@ ucontext_t main_ctx, t1_ctx, t2_ctx;
 void *f1()
 {
 	puts("Thread 1 prints 1\n");
+	swapcontext(&t1_ctx, &t2_ctx);
 	puts("Thread 1 prints 2\n");
 	swapcontext(&t1_ctx, &t2_ctx);
 }
@@ -19,6 +20,7 @@ void *f1()
 void *f2()
 {
 	puts("Thread 2 prints 3\n");
+	swapcontext(&t2_ctx,&t1_ctx);
 	puts("Thread 2 prints 4\n");
 	puts("Thread 2 returning context to main\n");
 	swapcontext(&t2_ctx, &main_ctx);
@@ -26,7 +28,7 @@ void *f2()
 
 int main(int argc, char **argv)
 {
-	ucontext_t cctx, nctx;
+	//ucontext_t cctx, nctx;
 
 	if (argc != 1)
 	{

@@ -18,9 +18,13 @@ typedef struct TCB {
     //     contains signal mask for any blocked signals
     ucontext_t context;
 
+    //return value for threads
     void* retval;
-    // thread priority
-    int priority;
+
+    int priority; //debug
+
+    //queue related structures, unused for normal TCBs
+    size_t queue_size;
     struct TCB *next, *prev;
 } tcb;
 
