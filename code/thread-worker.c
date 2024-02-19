@@ -23,7 +23,7 @@
 
 // INITIALIZE ALL YOUR OTHER VARIABLES HERE
 int initialized_threads = 0; //keeping track of whether we need to initialize variables
-struct sigaction sa;
+struct sigaction sa; //sigaction for calling schedule() during time interupt
 struct itimerval timer; //used for timer interrupts for schedule()
 tcb main_thread; //the main executing thread
 int totalthread = 0; //total count of threads
@@ -113,7 +113,8 @@ tcb* q_remove_elem(tcb** queue, tcb* thread) {
     return cur;
 }
 
-tcb* get_thread(worker_t id) { //returns tcb for the given id or NULL
+//returns tcb for the given id or NULL if none found
+tcb* get_thread(worker_t id) { 
     if(id == running->id)
         return running;
 
@@ -138,8 +139,10 @@ tcb* get_thread(worker_t id) { //returns tcb for the given id or NULL
     return NULL;
 }
 
-worker_t get_unique_id() { //used to get the next lowest available id
-    int *used = calloc(q_size(q_ready) + q_size(q_block) + q_size(q_terminated) + 1 /*tcb* running*/ + 1 /*for potentially no ids*/,sizeof(int));
+//used to get the next lowest available id
+worker_t get_unique_id() { 
+    int *used = calloc(q_size(q_ready) + q_size(q_block) + q_size(q_terminated) 
+                        + 1 /*tcb* running*/ + 1 /*for potentially no ids*/,sizeof(int));
     if(!used) {
         perror("Could not run function get_unique_id()");
         exit(EXIT_FAILURE);
