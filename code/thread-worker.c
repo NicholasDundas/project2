@@ -35,7 +35,7 @@ tcb* q_block = NULL; //threads currently blocking
 tcb* q_terminated = NULL; //threads finished executing
 
 tcb* running = NULL; //current running thread
-
+//comment
 
 static void schedule();
 static void sched_rr();
