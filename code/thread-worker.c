@@ -86,6 +86,22 @@ tcb* q_emplace_back(tcb** queue, tcb* thread) {
     return thread;
 }
 
+//pushes thread to the front and returns second argument (potentially useful for rewarding blocked threads)
+tcb* q_emplace_front(tcb** queue, tcb* thread) { 
+    if(*queue) {
+        thread->next = *queue; 
+        thread->prev = q_back(*queue);
+        thread->queue_size = q_size(*queue) + 1;
+        (*queue) = thread;
+    } else { //length 0 condition
+        *queue = thread;
+        (*queue)->next = NULL;
+        (*queue)->queue_size = 1;
+        thread->prev = thread;
+    }
+    return thread;
+}
+
 //finds a element in a specific queue, returns NULL if none
 tcb* q_find_elem(tcb* queue, worker_t id) { 
     tcb* cur = queue;
