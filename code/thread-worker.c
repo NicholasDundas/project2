@@ -160,11 +160,11 @@ worker_t get_unique_id() {
         cur = cur->next;
     }
     
-   /* cur = q_block;
+    cur = q_block;
     while(cur) {
         used[cur->id] = 1;
         cur = cur->next;
-    }*/
+    }
         
     cur = q_terminated;
     while(cur) {
