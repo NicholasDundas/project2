@@ -10,8 +10,7 @@ typedef enum { NEW, RUNNING, WAITING, READY, TERMINATED } THREAD_STATUS;
 typedef struct TCB {
     // thread Id
     worker_t id;
-    // thread status
-    THREAD_STATUS status;
+
     // thread context
     //     contains thread stack, stack size, and stack flags
     //     contains register info and other information
@@ -20,8 +19,6 @@ typedef struct TCB {
 
     //return value for threads
     void* retval;
-
-    int priority; //debug
 
     //queue related structures, unused for normal TCBs
     size_t queue_size;

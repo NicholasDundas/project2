@@ -237,19 +237,11 @@ int worker_create(worker_t *thread, pthread_attr_t *attr, void *(*function)(void
     makecontext(&new_thread->context,(void (*)())&worker_run,2,function,arg);
 
     q_emplace_back(&q_ready,new_thread);
-
-
-    // - create Thread Control Block (TCB)
-    // - create and initialize the context of this worker thread
-    // - allocate space of stack for this thread to run
-    // after everything is set, push this thread into run queue and
-    // - make it ready for the execution.
     return 0;
 }
 
 /* give CPU possession to other user-level worker threads voluntarily */
-int worker_yield()
-{
+int worker_yield() {
     if(setitimer(ITIMER_PROF, NULL, NULL) == -1) {
         perror("Error turning off timer during worker yield timer reset\n");
         exit(EXIT_FAILURE);
@@ -259,22 +251,16 @@ int worker_yield()
         exit(EXIT_FAILURE);
     }
     schedule();
-    // - change worker thread's state from Running to Ready
-    // - save context of this thread to its thread control block
-    // - switch from thread context to scheduler context
     return 0;
-
 };
 
 /* terminate a thread */
 void worker_exit(void *value_ptr)
 {
-    //pushing to the back of queue
+    //push to terminated queue
     q_emplace_back(&q_terminated,running);
     running->retval = value_ptr;
     running_thread_terminate = TERMINATING_THREAD;
-    // - if value_ptr is provided, save return value
-    // - de-allocate any dynamic memory created when starting this thread (could be done here or elsewhere)
     schedule();
 }
 
@@ -289,9 +275,6 @@ int worker_join(worker_t thread, void **value_ptr) {
         }
         worker_yield();
     }
-    // - wait for a specific thread to terminate
-    // - if value_ptr is provided, retrieve return value from joining thread
-    // - de-allocate any dynamic memory created by the joining thread
 };
 
 /* initialize the mutex lock */
