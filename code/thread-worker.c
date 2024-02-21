@@ -98,6 +98,7 @@ tcb* q_find_elem(tcb* queue, worker_t id) {
 }
 
 //removes an element from the list and return seconds argument, returns NULL if none found
+//if thread is NULL then the returned value is null
 tcb* q_remove_elem(tcb** queue, tcb* thread) { 
     tcb* cur = (thread == NULL) ? NULL : q_find_elem(*queue,thread->id);
     if(cur) { 
