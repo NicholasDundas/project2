@@ -146,7 +146,7 @@ tcb* get_thread(worker_t id) {
 
 //used to get the next lowest available id
 worker_t get_unique_id() { 
-    int *used = calloc(q_size(q_ready) + q_size(q_block) + q_size(q_terminated) 
+    int *used = calloc(q_size(q_ready) /*+ q_size(q_block) */ + q_size(q_terminated) 
                         + 1 /*tcb* running*/ + 1 /*for potentially no ids*/,sizeof(int));
     if(!used) {
         perror("Could not run function get_unique_id()");
