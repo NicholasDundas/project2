@@ -2,7 +2,7 @@
 
 // List all group member's name:
 /* Nicholas Dundas npd59
- * Liam O'Neil ljo38
+ * Liam O'Neill ljo38
  */
 // username of iLab: npd59
 // iLab Server: ilab1.cs.rutgers.edu
