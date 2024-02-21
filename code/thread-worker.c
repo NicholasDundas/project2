@@ -16,13 +16,12 @@
 #define STACK_SIZE 16 * 1024
 #define QUANTUM 10 * 1000
 
-#define TERMINATING_THREAD 1
-#define NON_TERMINATING_THREAD 0
 
 
 #include <signal.h> 
 #include <sys/time.h> 
 #include <string.h>
+#include <stdbool.h>
 
 static void schedule();
 static void sched_rr();
@@ -34,7 +33,7 @@ struct itimerval timer; //used for timer interrupts for schedule()
 tcb main_thread; //the main executing thread
 ucontext_t schedule_context;
 int totalthread = 0; //total count of threads
-int running_thread_terminate = 0; //keeps track of whether the running thread should be added to ready queue or not during sched_rr()
+bool worker_exit_called = false; //keeps track of whether the running thread should be added to ready queue or not during sched_rr()
 // ####_queue->prev points to back of queue but it is not circular as the last element->next points to NULL
 
 tcb* q_ready = NULL; //threads waiting to be run
@@ -261,7 +260,7 @@ void worker_exit(void *value_ptr)
     //push to terminated queue
     q_emplace_back(&q_terminated,running);
     running->retval = value_ptr;
-    running_thread_terminate = TERMINATING_THREAD;
+    worker_exit_called = true;
     schedule();
 }
 
@@ -349,13 +348,13 @@ static void sched_rr() {
 	}
 
     tcb* last = running;
-
-    if(running_thread_terminate == NON_TERMINATING_THREAD) {
+    running = q_pop_front(&q_ready);
+    if(!worker_exit_called) {
         q_emplace_back(&q_ready,last);
     } else {
-        running_thread_terminate = NON_TERMINATING_THREAD; 
+        worker_exit_called = false; 
     }
-    running = q_pop_front(&q_ready);
+
     if(!running) { 
         /*running is NULL implying no threads left so we can finally exit*/
         exit(EXIT_SUCCESS);
