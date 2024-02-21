@@ -7,8 +7,6 @@
 // username of iLab: npd59
 // iLab Server: ilab1.cs.rutgers.edu
 
-// test
-
 
 #include "thread-worker.h"
 #include "thread-worker_types.h"
