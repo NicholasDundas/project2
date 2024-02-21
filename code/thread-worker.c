@@ -16,18 +16,24 @@
 #define STACK_SIZE 16 * 1024
 #define QUANTUM 10 * 1000
 
+#define TERMINATING_THREAD 1
+#define NON_TERMINATING_THREAD 0
 
-#include <signal.h>
-#include <sys/time.h>
+
+#include <signal.h> 
+#include <sys/time.h> 
 #include <string.h>
+
+static void schedule();
+static void sched_rr();
 
 // INITIALIZE ALL YOUR OTHER VARIABLES HERE
 int initialized_threads = 0; //keeping track of whether we need to initialize variables
 struct sigaction sa; //sigaction for calling schedule() during time interupt
 struct itimerval timer; //used for timer interrupts for schedule()
-tcb main_thread; //the main executing thread
+tcb scheduler_thread; //the main executing thread
 int totalthread = 0; //total count of threads
-
+int running_thread_terminate = 0; //keeps track of whether the running thread should be added to ready queue or not during sched_rr()
 // ####_queue->prev points to back of queue but it is not circular as the last element->next points to NULL
 
 tcb* q_ready = NULL; //threads waiting to be run
@@ -35,10 +41,8 @@ tcb* q_block = NULL; //threads currently blocking
 tcb* q_terminated = NULL; //threads finished executing
 
 tcb* running = NULL; //current running thread
-//comment
 
-static void schedule();
-static void sched_rr();
+
 
 //returns size of queue
 size_t q_size(const tcb* queue) {
@@ -65,7 +69,7 @@ tcb* q_pop_front(tcb** queue) {
     return temp;
 }
 
-//pushing element to the back and returns second argument
+//pushes thread to the back and returns second argument
 tcb* q_emplace_back(tcb** queue, tcb* thread) { 
     if(*queue) {
         thread->next = NULL; 
@@ -83,7 +87,7 @@ tcb* q_emplace_back(tcb** queue, tcb* thread) {
 }
 
 //finds a element in a specific queue, returns NULL if none
-tcb* q_find_elem(const tcb* queue, worker_t id) { 
+tcb* q_find_elem(tcb* queue, worker_t id) { 
     tcb* cur = queue;
     while(cur) {
         if(cur->id == id) break;
@@ -190,11 +194,11 @@ void init_workers() {
         exit(EXIT_FAILURE);
     }
 
-    main_thread.id = 0;
-    makecontext(&main_thread.context, (void *)&schedule, 0);
-	running = &main_thread;
-    main_thread.next = NULL;
-    main_thread.prev = NULL;
+    scheduler_thread.id = 0;
+    makecontext(&scheduler_thread.context, (void *)&schedule, 0);
+	running = &scheduler_thread;
+    scheduler_thread.next = NULL;
+    scheduler_thread.prev = NULL;
 }
 
 /* create a new thread */
@@ -203,6 +207,7 @@ int worker_create(worker_t *thread, pthread_attr_t *attr, void *(*function)(void
         initialized_threads++;
         init_workers();
     }
+
     tcb* new_thread = malloc(sizeof(tcb));
     totalthread++;
     new_thread->id = get_unique_id();
@@ -214,7 +219,7 @@ int worker_create(worker_t *thread, pthread_attr_t *attr, void *(*function)(void
     new_thread->context.uc_stack.ss_size = STACK_SIZE;
     new_thread->context.uc_stack.ss_sp = malloc(new_thread->context.uc_stack.ss_size);
     new_thread->context.uc_stack.ss_flags = 0;
-    new_thread->context.uc_link = &main_thread.context;
+    new_thread->context.uc_link = &scheduler_thread.context;
     makecontext(&new_thread->context,(void *)&worker_run,2,function,arg);
 
     q_emplace_back(&q_ready,new_thread);
@@ -245,6 +250,7 @@ void worker_exit(void *value_ptr)
     //pushing to the back of queue
     q_emplace_back(&q_terminated,running);
     running->retval = value_ptr;
+    running_thread_terminate = 1;
     // - if value_ptr is provided, save return value
     // - de-allocate any dynamic memory created when starting this thread (could be done here or elsewhere)
 }
@@ -309,7 +315,7 @@ static void schedule() {
 // - invoke scheduling algorithms according to the policy (RR or MLFQ)
 
 // - schedule policy
-setitimer(ITIMER_PROF, NULL, NULL);
+
 
 #ifndef MLFQ
     // Choose RR
@@ -321,9 +327,36 @@ setitimer(ITIMER_PROF, NULL, NULL);
 }
 
 static void sched_rr() {
-    // - your own implementation of RR
-    // (feel free to modify arguments and return types)
+    if(setitimer(ITIMER_PROF, &timer, NULL) == -1) {
+        perror("Error turning off timer during regular schedule\n");
+        exit(EXIT_FAILURE);
+    }
+    tcb* last = running;
+    running = q_pop_front(&q_ready);
 
+    if(running_thread_terminate)
+        q_emplace_back(&q_ready,last);
+    else
+        running_thread_terminate = 0; 
+
+    if (getcontext(&scheduler_thread.context) == -1 ) {
+		printf("Error saving scheduler context\n");
+		exit(EXIT_FAILURE);
+	}
+    if(running) { //
+        if(setitimer(ITIMER_PROF, &timer, NULL) == -1) {
+            perror("Error setting timer during regular RR schedule\n");
+            exit(EXIT_FAILURE);
+        }
+        if (swapcontext(&last->context, &running->context) == -1) {
+		    perror("Error swapping context to next thread in RR schedule\n"); 
+            exit(EXIT_FAILURE);
+	    }
+    }
+
+    /*running is NULL implying no threads left so we can finally exit*/
+    exit(EXIT_SUCCESS);
+    
 }
 
 /* Preemptive MLFQ scheduling algorithm */

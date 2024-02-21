@@ -53,7 +53,7 @@ int worker_mutex_destroy(worker_mutex_t *mutex);
 #include <string.h>
 
 size_t q_size(const tcb* queue)
-tcb* q_find_elem(const tcb* queue, worker_t id);
+tcb* q_find_elem(tcb* queue, worker_t id);
 tcb* q_back(const tcb* queue);
 tcb* q_pop_front(tcb** queue);
 tcb* q_emplace_back(tcb** queue, tcb* thread);
