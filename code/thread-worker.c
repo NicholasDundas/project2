@@ -147,11 +147,12 @@ tcb* get_thread(worker_t id) {
 //used to get the next lowest available id
 worker_t get_unique_id() { 
     int *used = calloc(q_size(q_ready) + q_size(q_block) + q_size(q_terminated) 
-                        + 1 /*tcb* running*/ + 1 /*for potentially no ids*/,sizeof(int));
+                            + 1 /*tcb* running*/ + 1 /*for potentially no ids*/,sizeof(int));
     if(!used) {
-        perror("Could not run function get_unique_id()");
+        perror("Could not run function get_unique_id() malloc error");
         exit(EXIT_FAILURE);
     }
+    
     if(running)
         used[running->id] = 1;
     tcb* cur = q_ready;
@@ -171,6 +172,7 @@ worker_t get_unique_id() {
         used[cur->id] = 1;
         cur = cur->next;
     }
+
     worker_t new_id = 0;
     while(used[new_id]) {
         new_id++;
@@ -348,16 +350,17 @@ static void sched_rr() {
 	}
 
     tcb* last = running;
+    
     running = q_pop_front(&q_ready);
+    if(!running) { 
+        /*running is NULL implying no threads left so we can finally exit*/
+        exit(EXIT_SUCCESS);
+    }
+
     if(!worker_exit_called) {
         q_emplace_back(&q_ready,last);
     } else {
         worker_exit_called = false; 
-    }
-
-    if(!running) { 
-        /*running is NULL implying no threads left so we can finally exit*/
-        exit(EXIT_SUCCESS);
     }
 
     if(setitimer(ITIMER_PROF, &timer, NULL) == -1) {
