@@ -38,7 +38,7 @@ int running_thread_terminate = 0; //keeps track of whether the running thread sh
 // ####_queue->prev points to back of queue but it is not circular as the last element->next points to NULL
 
 tcb* q_ready = NULL; //threads waiting to be run
-//tcb* q_block = NULL; //threads currently blocking
+tcb* q_block = NULL; //threads currently blocking
 tcb* q_terminated = NULL; //threads finished executing
 
 tcb* running = NULL; //current running thread
@@ -129,11 +129,11 @@ tcb* get_thread(worker_t id) {
         cur = cur->next;
     }
     
-  /*  cur = q_block;
+    cur = q_block;
     while(cur) {
         if(cur->id == id) return cur;
         cur = cur->next;
-    }*/
+    }
         
     cur = q_terminated;
     while(cur) {
@@ -146,7 +146,7 @@ tcb* get_thread(worker_t id) {
 
 //used to get the next lowest available id
 worker_t get_unique_id() { 
-    int *used = calloc(q_size(q_ready) /*+ q_size(q_block) */ + q_size(q_terminated) 
+    int *used = calloc(q_size(q_ready) + q_size(q_block) + q_size(q_terminated) 
                         + 1 /*tcb* running*/ + 1 /*for potentially no ids*/,sizeof(int));
     if(!used) {
         perror("Could not run function get_unique_id()");
