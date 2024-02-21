@@ -129,11 +129,11 @@ tcb* get_thread(worker_t id) {
         cur = cur->next;
     }
     
-    cur = q_block;
+  /*  cur = q_block;
     while(cur) {
         if(cur->id == id) return cur;
         cur = cur->next;
-    }
+    }*/
         
     cur = q_terminated;
     while(cur) {
@@ -160,11 +160,11 @@ worker_t get_unique_id() {
         cur = cur->next;
     }
     
-    cur = q_block;
+   /* cur = q_block;
     while(cur) {
         used[cur->id] = 1;
         cur = cur->next;
-    }
+    }*/
         
     cur = q_terminated;
     while(cur) {
@@ -269,7 +269,7 @@ int worker_join(worker_t thread, void **value_ptr) {
     while(1) {
         tcb* find = q_remove_elem(&q_terminated,get_thread(thread));
         if(find) {
-            if(value_ptr && *value_ptr) *value_ptr = find->retval;
+            if(value_ptr) *value_ptr = find->retval;
             free(find);
             return 0;
         }

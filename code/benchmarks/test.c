@@ -12,14 +12,17 @@ void dummy_work(void *arg)
 
 	for (i = 0; i < 20; i++)
 	{
-		for (j = 0; j < 40000000; j++)
+		for (j = 0; j < 10000000; j++)
 		{
 		}
 		printf("Thread %d running\n", n);
 	}
 
+	int *ret = malloc(sizeof(int));
+	*ret = 740 + n;
+
 	printf("Thread %d exiting\n", n);
-	worker_exit(NULL);
+	worker_exit(ret);
 }
 
 int main(int argc, char **argv)
@@ -52,6 +55,8 @@ int main(int argc, char **argv)
 		counter[i] = i + 1;
 	}
 
+	int **retvals = (int *)malloc(thread_num * sizeof(int *));
+
 	worker_t *thread = (worker_t *)malloc(thread_num * sizeof(worker_t));
 
 	for (i = 0; i < thread_num; i++)
@@ -60,15 +65,30 @@ int main(int argc, char **argv)
 		worker_create(&thread[i], NULL, &dummy_work, &counter[i]);
 	}
 
+	int *ret;
 	for (i = 0; i < thread_num; i++)
 	{
 		printf("Main thread waiting on thread %d\n", counter[i]);
-		worker_join(thread[i], NULL);
+		worker_join(thread[i], &(retvals[i]));
 	}
 
 	printf("Main thread resume\n");
+
+	for (i = 0; i < thread_num; i++)
+	{
+		if (retvals[i] != NULL)
+		{
+			printf("thread %d returned val %d\n", counter[i], *(retvals[i]));
+		}
+		else
+		{
+			printf("thread %d exited before main thread called join\n", counter[i]);
+		}
+	}
+
 	free(thread);
 	free(counter);
+	free(retvals);
 
 	printf("Main thread exit\n");
 	return 0;
