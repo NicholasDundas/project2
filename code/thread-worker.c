@@ -38,7 +38,7 @@ int running_thread_terminate = 0; //keeps track of whether the running thread sh
 // ####_queue->prev points to back of queue but it is not circular as the last element->next points to NULL
 
 tcb* q_ready = NULL; //threads waiting to be run
-tcb* q_block = NULL; //threads currently blocking
+//tcb* q_block = NULL; //threads currently blocking
 tcb* q_terminated = NULL; //threads finished executing
 
 tcb* running = NULL; //current running thread
