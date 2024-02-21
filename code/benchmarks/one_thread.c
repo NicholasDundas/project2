@@ -8,7 +8,7 @@ void dummy_work(void *arg)
     int j = 0;
     int n = *((int *)arg);
 
-    for (i = 0; i < 20; i++)
+    for (i = 0; i < 5; i++)
     {
         for (j = 0; j < 10000000; j++)
         {

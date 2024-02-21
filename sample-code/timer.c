@@ -6,6 +6,7 @@
 
 void ring(int signum){
 	printf("RING RING! The timer has gone off\n");
+	setitimer(ITIMER_PROF, NULL, NULL);
 }
 
 int main(){
