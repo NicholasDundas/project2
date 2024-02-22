@@ -23,8 +23,8 @@
 #include <string.h>
 #include <stdbool.h>
 
-static void schedule();
-static void sched_rr();
+static void schedule(bool worker_exit_called);
+static void sched_rr(bool worker_exit_called);
 
 // INITIALIZE ALL YOUR OTHER VARIABLES HERE
 int initialized_threads = 0; //keeping track of whether we need to initialize variables
