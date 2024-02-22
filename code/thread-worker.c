@@ -306,6 +306,8 @@ int worker_mutex_init(worker_mutex_t *mutex,
                       const pthread_mutexattr_t *mutexattr)
 {
     //- initialize data structures for this mutex
+    *mutex = malloc(sizeof(worker_mutex_t))
+    mutex->is_locked = ATOMIC_FLAG_INIT;
     return 0;
 
 };
@@ -315,9 +317,17 @@ int worker_mutex_lock(worker_mutex_t *mutex)
 {
 
     // - use the built-in test-and-set atomic function to test the mutex
+    bool tas = atomic_flag_test_and_set(mutex->is_locked)
     // - if the mutex is acquired successfully, enter the critical section
+    if (!tas) {
+        return 1;
+    }
     // - if acquiring mutex fails, push current thread into block list and
     // context switch to the scheduler thread
+    else {
+        q_emplace_back(&q_block,running);
+        schedule(false)
+    }
     return 0;
 
 };
@@ -326,8 +336,10 @@ int worker_mutex_lock(worker_mutex_t *mutex)
 int worker_mutex_unlock(worker_mutex_t *mutex)
 {
     // - release mutex and make it available again.
+    atomic_flag_clear(mutex)
     // - put one or more threads in block list to run queue
     // so that they could compete for mutex later.
+
 
     return 0;
 };
@@ -336,7 +348,9 @@ int worker_mutex_unlock(worker_mutex_t *mutex)
 int worker_mutex_destroy(worker_mutex_t *mutex)
 {
     // - make sure mutex is not being used
+    worker_mutex_lock(mutex)
     // - de-allocate dynamic memory created in worker_mutex_init
+    free(mutex)
 
     return 0;
 };
