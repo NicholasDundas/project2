@@ -43,7 +43,22 @@ tcb* q_terminated = NULL; //threads finished executing
 
 tcb* running = NULL; //current running thread
 
+int timer_stop() {
+    return setitimer(ITIMER_PROF, NULL, NULL);
+}
 
+int timer_start(struct itimerval* timer) {
+    return setitimer(ITIMER_PROF, timer, NULL);
+}
+
+int timer_reset(struct itimerval* timer) {
+    int res = timer_stop();
+    if(res != 0) return res;
+    timer->it_value.tv_usec = timer->it_interval.tv_usec; 
+	timer->it_value.tv_sec = timer->it_interval.tv_sec;
+    return timer_start(timer);
+    
+}
 
 //returns size of queue
 size_t q_size(const tcb* queue) {
@@ -210,7 +225,6 @@ void sig_handle(int signum) {
 }
 
 void init_workers() {
-    
     memset (&sa, 0, sizeof(sa));
     sa.sa_handler = &sig_handle;
     sigaction (SIGPROF, &sa, NULL);
@@ -219,8 +233,9 @@ void init_workers() {
 	timer.it_interval.tv_sec = 0;
     timer.it_value.tv_usec = QUANTUM; 
 	timer.it_value.tv_sec = 0;
-    if(setitimer(ITIMER_PROF, &timer, NULL) == -1) {
-        perror("Error setting timer during worker init\n");
+
+    if(timer_start(&timer) == -1) {
+        perror("Error starting timer during worker init\n");
         exit(EXIT_FAILURE);
     }
 
@@ -261,12 +276,8 @@ int worker_create(worker_t *thread, pthread_attr_t *attr, void *(*function)(void
 
 /* give CPU possession to other user-level worker threads voluntarily */
 int worker_yield() {
-    if(setitimer(ITIMER_PROF, NULL, NULL) == -1) {
-        perror("Error turning off timer during worker yield timer reset\n");
-        exit(EXIT_FAILURE);
-    }
-    if(setitimer(ITIMER_PROF, &timer, NULL) == -1) {
-        perror("Error turning on timer during worker yield timer reset\n");
+    if(timer_reset(&timer) == -1) {
+        perror("Error resetting timer during worker yield\n");
         exit(EXIT_FAILURE);
     }
     schedule(false);
@@ -275,12 +286,8 @@ int worker_yield() {
 
 /* terminate a thread */
 void worker_exit(void *value_ptr) {
-    if(setitimer(ITIMER_PROF, NULL, NULL) == -1) {
-        perror("Error turning off timer during worker exit timer reset\n");
-        exit(EXIT_FAILURE);
-    }
-    if(setitimer(ITIMER_PROF, &timer, NULL) == -1) {
-        perror("Error turning on timer during worker exit timer reset\n");
+    if(timer_reset(&timer) == -1) {
+        perror("Error resetting timer during worker exit\n");
         exit(EXIT_FAILURE);
     }
     q_emplace_back(&q_terminated,running);
@@ -376,8 +383,8 @@ static void schedule(bool worker_exit_called) {
 }
 
 static void sched_rr(bool worker_exit_called) {
-    if(setitimer(ITIMER_PROF, NULL, NULL) == -1) {
-        perror("Error turning off timer during regular schedule\n");
+    if(timer_stop() == -1) {
+        perror("Error stopping timer during sched_rr\n");
         exit(EXIT_FAILURE);
     }
     if (getcontext(&schedule_context) == -1 ) {
@@ -399,8 +406,8 @@ static void sched_rr(bool worker_exit_called) {
         worker_exit_called = false; 
     }
 
-    if(setitimer(ITIMER_PROF, &timer, NULL) == -1) {
-        perror("Error setting timer during regular RR schedule\n");
+    if(timer_start(&timer) == -1) {
+        perror("Error starting timer during sched_rr\n");
         exit(EXIT_FAILURE);
     }
     if (swapcontext(&last->context, &running->context) == -1) {
