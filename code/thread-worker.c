@@ -33,7 +33,8 @@ struct itimerval timer; //used for timer interrupts for schedule()
 tcb main_thread; //the main executing thread
 ucontext_t schedule_context;
 int totalthread = 0; //total count of threads
-bool worker_exit_called = false; //keeps track of whether the running thread should be added to ready queue or not during sched_rr()
+
+//QUEUES BELOW
 // ####_queue->prev points to back of queue but it is not circular as the last element->next points to NULL
 
 tcb* q_ready = NULL; //threads waiting to be run
@@ -204,7 +205,7 @@ void worker_run(void *(*function)(void *), void *arg) {
 void sig_handle(int signum) {
     switch(signum) {
         case SIGPROF: //timer
-            schedule();
+            schedule(false);
     }
 }
 
@@ -268,18 +269,23 @@ int worker_yield() {
         perror("Error turning on timer during worker yield timer reset\n");
         exit(EXIT_FAILURE);
     }
-    schedule();
+    schedule(false);
     return 0;
 };
 
 /* terminate a thread */
-void worker_exit(void *value_ptr)
-{
-    //push to terminated queue
+void worker_exit(void *value_ptr) {
+    if(setitimer(ITIMER_PROF, NULL, NULL) == -1) {
+        perror("Error turning off timer during worker exit timer reset\n");
+        exit(EXIT_FAILURE);
+    }
+    if(setitimer(ITIMER_PROF, &timer, NULL) == -1) {
+        perror("Error turning on timer during worker exit timer reset\n");
+        exit(EXIT_FAILURE);
+    }
     q_emplace_back(&q_terminated,running);
     running->retval = value_ptr;
-    worker_exit_called = true;
-    schedule();
+    schedule(true);
 }
 
 /* Wait for thread termination */
@@ -336,7 +342,7 @@ int worker_mutex_destroy(worker_mutex_t *mutex)
 };
 
 /* scheduler */
-static void schedule() {
+static void schedule(bool worker_exit_called) {
 // - every time a timer interrupt occurs, your worker thread library
 // should be contexted switched from a thread context to this
 // schedule() function
@@ -348,14 +354,14 @@ static void schedule() {
 
 #ifndef MLFQ
     // Choose RR
-    sched_rr();
+    sched_rr(worker_exit_called);
 #else
     // Choose MLFQ
     
 #endif
 }
 
-static void sched_rr() {
+static void sched_rr(bool worker_exit_called) {
     if(setitimer(ITIMER_PROF, NULL, NULL) == -1) {
         perror("Error turning off timer during regular schedule\n");
         exit(EXIT_FAILURE);
@@ -375,7 +381,7 @@ static void sched_rr() {
 
     if(!worker_exit_called) {
         q_emplace_back(&q_ready,last);
-    } else {
+    } else { //we put it in q_terminated already from worker_exit
         worker_exit_called = false; 
     }
 
