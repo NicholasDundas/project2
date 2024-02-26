@@ -5,7 +5,7 @@
 #define DEFAULT_THREAD_NUM 6
 
 int global_counter;
-worker_mutex_t* mutex;
+worker_mutex_t mutex;
 
 void dummy_work_short(void *arg)
 {
@@ -52,12 +52,12 @@ void mutex_work(void *arg)
 
 	for (i = 0; i < 7; i++)
 	{
-		worker_mutex_lock(mutex);
+		worker_mutex_lock(&mutex);
 		for (j = 0; j < 8000000; j++)
 		{
 			global_counter++;
 		}
-		worker_mutex_unlock(mutex);
+		worker_mutex_unlock(&mutex);
 		printf("Thread %d running\n", n);
 	}
 
@@ -87,8 +87,7 @@ int main(int argc, char **argv)
 
 	printf("Running main thread\n");
 
-	mutex = (worker_mutex_t*) malloc(sizeof(worker_mutex_t));
-	worker_mutex_init(mutex, NULL);
+	worker_mutex_init(&mutex, NULL);
 
 	int i = 0;
 
@@ -124,7 +123,7 @@ int main(int argc, char **argv)
 	printf("%d total increments\n", global_counter);
 	free(thread);
 	free(counter);
-	worker_mutex_destroy(mutex);
+	worker_mutex_destroy(&mutex);
 
 	printf("Main thread exit\n");
 	return 0;

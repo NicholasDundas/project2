@@ -322,18 +322,18 @@ int worker_mutex_init(worker_mutex_t *mutex,
 int worker_mutex_lock(worker_mutex_t *mutex) {
 
     // - use the built-in test-and-set atomic function to test the mutex
-    bool tas = atomic_flag_test_and_set(mutex->is_locked);
     // - if the mutex is acquired successfully, enter the critical section
-    if (!tas) {
-        return 1;
-    }
     // - if acquiring mutex fails, push current thread into block list and
     // context switch to the scheduler thread
-    else {
+    while (atomic_flag_test_and_set(mutex->is_locked)) {
         q_emplace_back(&q_block,running);
+        if(timer_reset(&timer) == -1) {
+            perror("Error resetting timer during worker yield in mutex lock\n");
+            exit(EXIT_FAILURE);
+        }
         schedule(true);
     }
-    return 0;
+    return 1;
 
 };
 
@@ -355,7 +355,7 @@ int worker_mutex_destroy(worker_mutex_t *mutex) {
     // - make sure mutex is not being used
     worker_mutex_lock(mutex);
     // - de-allocate dynamic memory created in worker_mutex_init
-    free(mutex);
+    free(mutex->is_locked);
 
     return 0;
 };
