@@ -310,21 +310,19 @@ int worker_join(worker_t thread, void **value_ptr) {
 
 /* initialize the mutex lock */
 int worker_mutex_init(worker_mutex_t *mutex,
-                      const pthread_mutexattr_t *mutexattr)
-{
+                      const pthread_mutexattr_t *mutexattr) {
     //- initialize data structures for this mutex
-    *mutex = malloc(sizeof(worker_mutex_t))
-    mutex->is_locked = ATOMIC_FLAG_INIT;
+    mutex->is_locked = (atomic_flag*) malloc(sizeof(atomic_flag));
+    atomic_flag_clear(mutex->is_locked);
     return 0;
 
 };
 
-/* aquire the mutex lock */
-int worker_mutex_lock(worker_mutex_t *mutex)
-{
+/* acquire the mutex lock */
+int worker_mutex_lock(worker_mutex_t *mutex) {
 
     // - use the built-in test-and-set atomic function to test the mutex
-    bool tas = atomic_flag_test_and_set(mutex->is_locked)
+    bool tas = atomic_flag_test_and_set(mutex->is_locked);
     // - if the mutex is acquired successfully, enter the critical section
     if (!tas) {
         return 1;
@@ -333,31 +331,31 @@ int worker_mutex_lock(worker_mutex_t *mutex)
     // context switch to the scheduler thread
     else {
         q_emplace_back(&q_block,running);
-        schedule(false)
+        schedule(true);
     }
     return 0;
 
 };
 
 /* release the mutex lock */
-int worker_mutex_unlock(worker_mutex_t *mutex)
-{
+int worker_mutex_unlock(worker_mutex_t *mutex) {
     // - release mutex and make it available again.
-    atomic_flag_clear(mutex)
+    atomic_flag_clear(mutex->is_locked);
     // - put one or more threads in block list to run queue
     // so that they could compete for mutex later.
-
+    while (q_block) {
+        q_emplace_back(&q_ready, q_pop_front(&q_block));
+    }
 
     return 0;
 };
 
 /* destroy the mutex */
-int worker_mutex_destroy(worker_mutex_t *mutex)
-{
+int worker_mutex_destroy(worker_mutex_t *mutex) {
     // - make sure mutex is not being used
-    worker_mutex_lock(mutex)
+    worker_mutex_lock(mutex);
     // - de-allocate dynamic memory created in worker_mutex_init
-    free(mutex)
+    free(mutex);
 
     return 0;
 };
