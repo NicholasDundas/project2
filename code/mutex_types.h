@@ -8,7 +8,7 @@
 typedef struct worker_mutex_t
 {
     // whether the mutex is locked
-    atomic_flag* is_locked;
+    atomic_flag is_locked;
     
 } worker_mutex_t;
 

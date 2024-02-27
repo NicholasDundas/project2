@@ -2,7 +2,6 @@
 #include <unistd.h>
 #include "../thread-worker.h"
 
-#define DEFAULT_THREAD_NUM 6
 
 int global_counter, global_counter2;
 worker_mutex_t mutex, mutex2;
@@ -19,7 +18,7 @@ void dummy_work_short(void *arg)
 		worker_mutex_lock(&mutex);
 		printf("Thread %d got mutex\n", n);
 		int shared = global_counter;
-		for (j = 0; j < 800000; j++)
+		for (j = 0; j < 80000; j++)
 		{
 		}
 		global_counter = shared + 1;
@@ -60,6 +59,11 @@ int main(int argc, char **argv)
 
 	worker_mutex_init(&mutex, NULL);
 	worker_mutex_init(&mutex2, NULL);
+
+	for (int j = 0; j < 300000000; j++)
+	{
+	}
+
 	int i = 0;
 	int thread_num = 4;
 	int *counter = malloc(thread_num * sizeof(int));
@@ -93,12 +97,17 @@ int main(int argc, char **argv)
 	}
 
 	printf("Main thread resume\n");
-	printf("%d global total increments, expected: 30\n", global_counter);
-	printf("%d global2 total increments, expected: 30\n", global_counter2);
+	printf("%d global total increments, expected: 60\n", global_counter);
+	printf("%d global2 total increments, expected: 60\n", global_counter2);
 	free(thread);
 	free(counter);
 	worker_mutex_destroy(&mutex);
 	worker_mutex_destroy(&mutex2);
+
+	for (int j = 0; j < 30000000; j++)
+	{
+	}
+
 	printf("Main thread exit\n");
 	return 0;
 }

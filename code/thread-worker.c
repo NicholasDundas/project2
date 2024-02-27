@@ -32,7 +32,7 @@ struct sigaction sa; //sigaction for calling schedule() during time interupt
 struct itimerval timer; //used for timer interrupts for schedule()
 tcb main_thread; //the main executing thread
 ucontext_t schedule_context;
-int totalthread = 0; //total count of threads
+int totalthread = 1; //total count of threads
 
 //QUEUES BELOW
 // ####_queue->prev points to back of queue but it is not circular as the last element->next points to NULL
@@ -43,15 +43,15 @@ tcb* q_terminated = NULL; //threads finished executing
 
 tcb* running = NULL; //current running thread
 
-int timer_stop() {
+static int timer_stop() {
     return setitimer(ITIMER_PROF, NULL, NULL);
 }
 
-int timer_start(struct itimerval* timer) {
+static int timer_start(struct itimerval* timer) {
     return setitimer(ITIMER_PROF, timer, NULL);
 }
 
-int timer_reset(struct itimerval* timer) {
+static int timer_reset(struct itimerval* timer) {
     int res = timer_stop();
     if(res != 0) return res;
     timer->it_value.tv_usec = timer->it_interval.tv_usec; 
@@ -61,17 +61,30 @@ int timer_reset(struct itimerval* timer) {
 }
 
 //returns size of queue
-size_t q_size(const tcb* queue) {
+static size_t q_size(const tcb* queue) {
     return queue ? queue->queue_size : 0;
 }
 
+//creates a copy of a tcb
+static tcb* tcbdup(tcb* src) {
+    tcb* cpy = malloc(sizeof(tcb));
+    if(cpy) {
+        memcpy(cpy,src,sizeof(tcb));
+    }
+    return cpy;
+}
+
+static void q_init(tcb** queue) {
+    *queue = NULL;
+}
+
 //returns back of queue
-tcb* q_back(const tcb* queue) { 
+static tcb* q_back(const tcb* queue) { 
     return queue ? queue->prev : NULL;
 }
 
 //pops front element from queue and returns it, returns NULL if none
-tcb* q_pop_front(tcb** queue) { 
+static tcb* q_pop_front(tcb** queue) { 
     tcb* temp = *queue;
     if(q_back(*queue) == *queue) {
         *queue = NULL;
@@ -85,8 +98,17 @@ tcb* q_pop_front(tcb** queue) {
     return temp;
 }
 
+//pushes thread to the front and returns second argument
+static tcb* q_emplace_front(tcb** queue, tcb* thread) {
+    thread->next = (*queue); 
+    thread->prev = q_back(*queue);
+    thread->queue_size = q_size(*queue) + 1;
+    (*queue) = thread;
+    return thread;
+}
+
 //pushes thread to the back and returns second argument
-tcb* q_emplace_back(tcb** queue, tcb* thread) { 
+static tcb* q_emplace_back(tcb** queue, tcb* thread) { 
     if(*queue) {
         thread->next = NULL; 
         thread->prev = q_back(*queue);
@@ -102,24 +124,8 @@ tcb* q_emplace_back(tcb** queue, tcb* thread) {
     return thread;
 }
 
-//pushes thread to the front and returns second argument (potentially useful for rewarding blocked threads)
-tcb* q_emplace_front(tcb** queue, tcb* thread) { 
-    if(*queue) {
-        thread->next = *queue; 
-        thread->prev = q_back(*queue);
-        thread->queue_size = q_size(*queue) + 1;
-        (*queue) = thread;
-    } else { //length 0 condition
-        *queue = thread;
-        (*queue)->next = NULL;
-        (*queue)->queue_size = 1;
-        thread->prev = thread;
-    }
-    return thread;
-}
-
 //finds a element in a specific queue, returns NULL if none
-tcb* q_find_elem(tcb* queue, worker_t id) { 
+static tcb* q_find_elem(tcb* queue, worker_t id) { 
     tcb* cur = queue;
     while(cur) {
         if(cur->id == id) break;
@@ -129,8 +135,8 @@ tcb* q_find_elem(tcb* queue, worker_t id) {
 }
 
 //removes an element from the list and return seconds argument, returns NULL if none found
-//if thread is NULL then the returned value is null
-tcb* q_remove_elem(tcb** queue, tcb* thread) { 
+//if thread is NULL then the returned value is null and Nop is preformed
+static tcb* q_remove_elem(tcb** queue, tcb* thread) { 
     tcb* cur = (thread == NULL) ? NULL : q_find_elem(*queue,thread->id);
     if(cur) { 
         if(cur == *queue) { //1st element 
@@ -151,7 +157,7 @@ tcb* q_remove_elem(tcb** queue, tcb* thread) {
 }
 
 //returns tcb for the given id or NULL if none found
-tcb* get_thread(worker_t id) { 
+static tcb* get_thread(worker_t id) { 
     if(id == running->id)
         return running;
 
@@ -177,7 +183,7 @@ tcb* get_thread(worker_t id) {
 }
 
 //used to get the next lowest available id
-worker_t get_unique_id() { 
+static worker_t get_unique_id() { 
     int *used = calloc(q_size(q_ready) + q_size(q_block) + q_size(q_terminated) 
                             + 1 /*tcb* running*/ + 1 /*for potentially no ids*/,sizeof(int));
     if(!used) {
@@ -213,18 +219,18 @@ worker_t get_unique_id() {
     return new_id;
 }
 
-void worker_run(void *(*function)(void *), void *arg) {
+static void worker_run(void *(*function)(void *), void *arg) {
     worker_exit(function(arg));
 }
 
-void sig_handle(int signum) {
+static void sig_handle(int signum) {
     switch(signum) {
         case SIGPROF: //timer
             schedule(false);
     }
 }
 
-void init_workers() {
+static void init_workers() {
     memset (&sa, 0, sizeof(sa));
     sa.sa_handler = &sig_handle;
     sigaction (SIGPROF, &sa, NULL);
@@ -257,7 +263,6 @@ int worker_create(worker_t *thread, pthread_attr_t *attr, void *(*function)(void
     }
 
     tcb* new_thread = malloc(sizeof(tcb));
-    totalthread++;
     *thread = (new_thread->id = get_unique_id());
     if (getcontext(&new_thread->context) == -1) {
 		perror("Error getting worker thread context\n");
@@ -286,8 +291,8 @@ int worker_yield() {
 
 /* terminate a thread */
 void worker_exit(void *value_ptr) {
-    if(timer_reset(&timer) == -1) {
-        perror("Error resetting timer during worker exit\n");
+    if(timer_stop(&timer) == -1) {
+        perror("Error stopping timer during worker exit\n");
         exit(EXIT_FAILURE);
     }
     q_emplace_back(&q_terminated,running);
@@ -312,20 +317,26 @@ int worker_join(worker_t thread, void **value_ptr) {
 int worker_mutex_init(worker_mutex_t *mutex,
                       const pthread_mutexattr_t *mutexattr) {
     //- initialize data structures for this mutex
-    mutex->is_locked = (atomic_flag*) malloc(sizeof(atomic_flag));
-    atomic_flag_clear(mutex->is_locked);
+    if(!initialized_threads) {
+        initialized_threads++;
+        init_workers();
+    }
+    atomic_flag_clear(&mutex->is_locked);
     return 0;
 
 };
 
 /* acquire the mutex lock */
 int worker_mutex_lock(worker_mutex_t *mutex) {
-
     // - use the built-in test-and-set atomic function to test the mutex
     // - if the mutex is acquired successfully, enter the critical section
     // - if acquiring mutex fails, push current thread into block list and
     // context switch to the scheduler thread
-    while (atomic_flag_test_and_set(mutex->is_locked)) {
+    while (atomic_flag_test_and_set(&mutex->is_locked)) {
+        if(timer_stop() == -1) {
+            perror("Error stopping timer during lock\n");
+            exit(EXIT_FAILURE);
+        }
         q_emplace_back(&q_block,running);
         if(timer_reset(&timer) == -1) {
             perror("Error resetting timer during worker yield in mutex lock\n");
@@ -339,14 +350,18 @@ int worker_mutex_lock(worker_mutex_t *mutex) {
 
 /* release the mutex lock */
 int worker_mutex_unlock(worker_mutex_t *mutex) {
+    if(timer_stop() == -1) {
+        perror("Error stopping timer during unlock\n");
+        exit(EXIT_FAILURE);
+    }
     // - release mutex and make it available again.
-    atomic_flag_clear(mutex->is_locked);
+    atomic_flag_clear(&mutex->is_locked);
     // - put one or more threads in block list to run queue
     // so that they could compete for mutex later.
     while (q_block) {
         q_emplace_back(&q_ready, q_pop_front(&q_block));
     }
-
+    schedule(false);
     return 0;
 };
 
@@ -355,41 +370,43 @@ int worker_mutex_destroy(worker_mutex_t *mutex) {
     // - make sure mutex is not being used
     worker_mutex_lock(mutex);
     // - de-allocate dynamic memory created in worker_mutex_init
-    free(mutex->is_locked);
-
     return 0;
 };
 
 /* scheduler */
-static void schedule(bool worker_exit_called) {
-// - every time a timer interrupt occurs, your worker thread library
-// should be contexted switched from a thread context to this
-// schedule() function
+static void schedule(bool emplaced) {
+    // - every time a timer interrupt occurs, your worker thread library
+    // should be contexted switched from a thread context to this
+    // schedule() function
 
-// - invoke scheduling algorithms according to the policy (RR or MLFQ)
+    // - invoke scheduling algorithms according to the policy (RR or MLFQ)
 
-// - schedule policy
-
-
-#ifndef MLFQ
-    // Choose RR
-    sched_rr(worker_exit_called);
-#else
-    // Choose MLFQ
-    
-#endif
-}
-
-static void sched_rr(bool worker_exit_called) {
-    if(timer_stop() == -1) {
-        perror("Error stopping timer during sched_rr\n");
-        exit(EXIT_FAILURE);
-    }
+    // - schedule policy
     if (getcontext(&schedule_context) == -1 ) {
 		printf("Error saving scheduler context\n");
 		exit(EXIT_FAILURE);
 	}
+    if(q_ready) {
+        if(timer_stop() == -1) {
+            perror("Error stopping timer during sched_rr\n");
+            exit(EXIT_FAILURE);
+        }
+#ifndef MLFQ
+    // Choose RR
+    sched_rr(emplaced);
+#else
+    // Choose MLFQ
+    
+#endif
+    } else {
+        if(timer_reset(&timer) == -1) {
+            perror("Error resetting timer during sched_rr\n");
+            exit(EXIT_FAILURE);
+        }
+    }
+}
 
+static void sched_rr(bool emplaced) {
     tcb* last = running;
     
     running = q_pop_front(&q_ready);
@@ -398,11 +415,9 @@ static void sched_rr(bool worker_exit_called) {
         exit(EXIT_SUCCESS);
     }
 
-    if(!worker_exit_called) {
+    if(!emplaced) {
         q_emplace_back(&q_ready,last);
-    } else { //we put it in q_terminated already from worker_exit
-        worker_exit_called = false; 
-    }
+    } //we put it in q_terminated already from worker_exit
 
     if(timer_start(&timer) == -1) {
         perror("Error starting timer during sched_rr\n");
