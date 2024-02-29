@@ -47,21 +47,4 @@ int worker_mutex_unlock(worker_mutex_t *mutex);
 /* destroy the mutex */
 int worker_mutex_destroy(worker_mutex_t *mutex);
 
-#ifdef WORKER_DEBUG
-#include <signal.h>
-#include <sys/time.h>
-#include <string.h>
-
-size_t q_size(const tcb* queue)
-tcb* q_find_elem(tcb* queue, worker_t id);
-tcb* q_back(const tcb* queue);
-tcb* q_pop_front(tcb** queue);
-tcb* q_emplace_back(tcb** queue, tcb* thread);
-tcb* q_emplace_front(tcb** queue, tcb* thread);
-tcb* q_remove_elem(tcb** queue, tcb* thread);
-tcb* get_thread(worker_t id);
-worker_t get_unique_id();
-
-#endif
-
 #endif

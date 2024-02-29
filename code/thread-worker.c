@@ -65,15 +65,6 @@ static size_t q_size(const tcb* queue) {
     return queue ? queue->queue_size : 0;
 }
 
-//creates a copy of a tcb
-static tcb* tcbdup(tcb* src) {
-    tcb* cpy = malloc(sizeof(tcb));
-    if(cpy) {
-        memcpy(cpy,src,sizeof(tcb));
-    }
-    return cpy;
-}
-
 static void q_init(tcb** queue) {
     *queue = NULL;
 }
@@ -96,15 +87,6 @@ static tcb* q_pop_front(tcb** queue) {
         temp->next = NULL;
     }
     return temp;
-}
-
-//pushes thread to the front and returns second argument
-static tcb* q_emplace_front(tcb** queue, tcb* thread) {
-    thread->next = (*queue); 
-    thread->prev = q_back(*queue);
-    thread->queue_size = q_size(*queue) + 1;
-    (*queue) = thread;
-    return thread;
 }
 
 //pushes thread to the back and returns second argument
