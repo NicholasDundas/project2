@@ -299,10 +299,6 @@ int worker_join(worker_t thread, void **value_ptr) {
 int worker_mutex_init(worker_mutex_t *mutex,
                       const pthread_mutexattr_t *mutexattr) {
     //- initialize data structures for this mutex
-    if(!initialized_threads) {
-        initialized_threads++;
-        init_workers();
-    }
     atomic_flag_clear(&mutex->is_locked);
     return 0;
 
