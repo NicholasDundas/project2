@@ -311,16 +311,18 @@ int worker_mutex_lock(worker_mutex_t *mutex) {
     // - if acquiring mutex fails, push current thread into block list and
     // context switch to the scheduler thread
     while (atomic_flag_test_and_set(&mutex->is_locked)) {
-        if(timer_stop() == -1) {
-            perror("Error stopping timer during lock\n");
-            exit(EXIT_FAILURE);
+        if(initialized_threads) {
+            if(timer_stop() == -1) {
+                perror("Error stopping timer during lock\n");
+                exit(EXIT_FAILURE);
+            }
+            q_emplace_back(&q_block,running);
+            if(timer_reset(&timer) == -1) {
+                perror("Error resetting timer during worker yield in mutex lock\n");
+                exit(EXIT_FAILURE);
+            }
+            schedule(true);
         }
-        q_emplace_back(&q_block,running);
-        if(timer_reset(&timer) == -1) {
-            perror("Error resetting timer during worker yield in mutex lock\n");
-            exit(EXIT_FAILURE);
-        }
-        schedule(true);
     }
     return 1;
 
@@ -328,18 +330,22 @@ int worker_mutex_lock(worker_mutex_t *mutex) {
 
 /* release the mutex lock */
 int worker_mutex_unlock(worker_mutex_t *mutex) {
-    if(timer_stop() == -1) {
-        perror("Error stopping timer during unlock\n");
-        exit(EXIT_FAILURE);
+    if(initialized_threads) {
+        if(timer_stop() == -1) {
+            perror("Error stopping timer during unlock\n");
+            exit(EXIT_FAILURE);
+        }
     }
-    // - release mutex and make it available again.
     atomic_flag_clear(&mutex->is_locked);
-    // - put one or more threads in block list to run queue
-    // so that they could compete for mutex later.
-    while (q_block) {
-        q_emplace_back(&q_ready, q_pop_front(&q_block));
+    if(initialized_threads) {
+        // - release mutex and make it available again.
+        // - put one or more threads in block list to run queue
+        // so that they could compete for mutex later.
+        while (q_block) {
+            q_emplace_back(&q_ready, q_pop_front(&q_block));
+        }
+        schedule(false);
     }
-    schedule(false);
     return 0;
 };
 
