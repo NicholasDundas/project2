@@ -31,8 +31,7 @@ int initialized_threads = 0; //keeping track of whether we need to initialize va
 struct sigaction sa; //sigaction for calling schedule() during time interupt
 struct itimerval timer; //used for timer interrupts for schedule()
 tcb main_thread; //the main executing thread
-ucontext_t schedule_context;
-int totalthread = 1; //total count of threads
+ucontext_t schedule_context; //stores the scheduler context so any exiting threads call upon the scheduler
 
 //QUEUES BELOW
 // ####_queue->prev points to back of queue but it is not circular as the last element->next points to NULL
@@ -53,9 +52,9 @@ static int timer_start(struct itimerval* timer) {
 
 static int timer_reset(struct itimerval* timer) {
     int res = timer_stop();
-    if(res != 0) return res;
     timer->it_value.tv_usec = timer->it_interval.tv_usec; 
 	timer->it_value.tv_sec = timer->it_interval.tv_sec;
+    if(res != 0) return res;
     return timer_start(timer);
     
 }
@@ -244,7 +243,13 @@ int worker_create(worker_t *thread, pthread_attr_t *attr, void *(*function)(void
         init_workers();
     }
 
+    if(timer_stop(&timer) == -1) {
+        perror("Error stopping timer during worker create\n");
+        exit(EXIT_FAILURE);
+    }
+
     tcb* new_thread = malloc(sizeof(tcb));
+    memset(new_thread,0,sizeof(tcb));
     *thread = (new_thread->id = get_unique_id());
     if (getcontext(&new_thread->context) == -1) {
 		perror("Error getting worker thread context\n");
@@ -258,6 +263,11 @@ int worker_create(worker_t *thread, pthread_attr_t *attr, void *(*function)(void
     makecontext(&new_thread->context,(void (*)())&worker_run,2,function,arg);
 
     q_emplace_back(&q_ready,new_thread);
+
+    if(timer_start(&timer) == -1) {
+        perror("Error starting timer during worker create\n");
+        exit(EXIT_FAILURE);
+    }
     return 0;
 }
 
@@ -285,6 +295,10 @@ void worker_exit(void *value_ptr) {
 /* Wait for thread termination */
 int worker_join(worker_t thread, void **value_ptr) {
     while(1) {
+        if(timer_stop(&timer) == -1) {
+            perror("Error stopping timer during worker join\n");
+            exit(EXIT_FAILURE);
+        }
         tcb* find = q_remove_elem(&q_terminated,get_thread(thread));
         if(find) {
             if(value_ptr) *value_ptr = find->retval;
